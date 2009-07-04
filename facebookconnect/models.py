@@ -22,20 +22,22 @@ import logging
 import sha, random
 from urllib2 import URLError
 
-from facebook.djangofb import Facebook,get_facebook_client
+from facebook.djangofb import Facebook, get_facebook_client
 from facebook import FacebookError
 
 from django.db import models
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.contrib.auth.backends import ModelBackend
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models.signals import post_delete
 
-class FacebookBackend:
+class FacebookBackend(ModelBackend):
     def authenticate(self, request=None):
         fb = get_facebook_client()
-        fb.check_session(request)
+        logging.debug("ala %s", fb.check_session(request))
+        logging.debug("fb.uid %s", fb.uid)
         if fb.uid:
             try:
                 logging.debug("Checking for Facebook Profile %s..." % fb.uid)
@@ -44,21 +46,31 @@ class FacebookBackend:
             except FacebookProfile.DoesNotExist:
                 logging.debug("FB account hasn't been used before...")
                 return None
+        elif settings.FACEBOOK_DEBUG:
+            try:
+                fbprofile = FacebookProfile.objects.get(facebook_id=0)
+
+            except FacebookProfile.DoesNotExist:
+                dummy_name = "facebook_dummy"
+                try:
+                    user = User.objects.get(username=dummy_name)
+                except User.DoesNotExist:
+                    user = User.objects.create(username=dummy_name)
+                    user.set_unusable_password()
+                    user.save()
+                fbprofile = FacebookProfile(user=user, facebook_id=0)
+                fbprofile.save()
+            logging.debug("Using dummy ")
+            return fbprofile.user
         else:
             logging.debug("Invalid Facebook login for %s" % fb.__dict__)
             return None
-        
-    def get_user(self, user_id):
-        try:
-            return User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return None
-        
+
 class BigIntegerField(models.IntegerField):
     empty_strings_allowed=False
     def get_internal_type(self):
         return "BigIntegerField"
-    
+
     def db_type(self):
         if settings.DATABASE_ENGINE == 'oracle':
             return "NUMBER(19)"
@@ -68,14 +80,14 @@ class BigIntegerField(models.IntegerField):
 class FacebookTemplate(models.Model):
     name = models.SlugField(unique=True)
     template_bundle_id = BigIntegerField()
-    
+
     def __unicode__(self):
         return self.name.capitalize()
 
 class FacebookProfile(models.Model):
     user = models.OneToOneField(User,related_name="facebook_profile")
     facebook_id = models.IntegerField(unique=True)
-    
+
     __facebook_info = None
 
     FACEBOOK_FIELDS = ['uid,name,first_name,pic_square_with_logo,affiliations,status,proxied_email']
@@ -88,7 +100,7 @@ class FacebookProfile(models.Model):
         'status':None,
         'proxied_email':None,
     }
-    
+
     def __init__(self, *args, **kwargs):
         """reset local DUMMY info"""
         super(FacebookProfile,self).__init__(*args,**kwargs)
@@ -108,7 +120,7 @@ class FacebookProfile(models.Model):
     def __get_profile_url(self):
         return u"http://www.facebook.com/profile.php?id=%s" % (self.facebook_id)
     profile_url = property(__get_profile_url)
-    
+
     def __get_full_name(self):
         self.__configure_me()
         if self.__facebook_info['name']:
@@ -116,7 +128,7 @@ class FacebookProfile(models.Model):
         else:
             return self.DUMMY_FACEBOOK_INFO['name']
     full_name = property(__get_full_name)
-    
+
     def __get_first_name(self):
         self.__configure_me()
         if self.__facebook_info['first_name']:
@@ -124,12 +136,12 @@ class FacebookProfile(models.Model):
         else:
             return self.DUMMY_FACEBOOK_INFO['first_name']
     first_name = property(__get_first_name)
-    
+
     def __get_networks(self):
         self.__configure_me()
         return self.__facebook_info['affiliations']
     networks = property(__get_networks)
-    
+
     def __get_status(self):
         self.__configure_me()
         if self.__facebook_info['status']:
@@ -165,14 +177,14 @@ class FacebookProfile(models.Model):
             except (User.DoesNotExist, FacebookProfile.DoesNotExist):
                 logging.error("FBC: Can't find friend profile %s" % id)
         return friends
-            
+
     def facebook_only(self):
         """return true if this user uses facebook and only facebook"""
         if self.facebook_id and str(self.facebook_id) == self.user.username:
             return True
         else:
             return False
-    
+
     def is_authenticated(self):
         """Check if this fb user is logged in"""
         _facebook_obj = get_facebook_client()
@@ -191,13 +203,13 @@ class FacebookProfile(models.Model):
 
         else:
             return False
-    
+
 
     def __get_facebook_friends(self):
         _facebook_obj = get_facebook_client()
         friends = []
         cache_key = 'fb_friends_%s' % (self.facebook_id)
-    
+
         fb_info_cache = cache.get(cache_key)
         if fb_info_cache:
             friends = fb_info_cache
@@ -209,8 +221,8 @@ class FacebookProfile(models.Model):
             logging.debug("FBC: Calling for '%s'" % cache_key)
             friends = _facebook_obj.friends.getAppUsers()
             cache.set(cache_key,friends,getattr(settings,'FACEBOOK_CACHE_TIMEOUT',1800))
-        
-        return friends        
+
+        return friends
 
     def __get_facebook_info(self,fbids):
         _facebook_obj = get_facebook_client()
@@ -219,18 +231,18 @@ class FacebookProfile(models.Model):
         for id in fbids:
             if id is 0:
                 ret.append(self.DUMMY_FACEBOOK_INFO)
-            
+
             if _facebook_obj.uid is None:
                 cache_key = 'fb_user_info_%s' % id
             else:
                 cache_key = 'fb_user_info_%s_%s' % (_facebook_obj.uid,id)
-        
+
             fb_info_cache = cache.get(cache_key)
             if fb_info_cache:
                 ret.append(fb_info_cache)
             else:
                 ids_to_get.append(id)
-        
+
         if len(ids_to_get) > 0:
             if getattr(settings,'RANDOM_FACEBOOK_FAIL',False) and random.randint(1,10) is 8:
                 raise FacebookError(102,"RANDOM FACEBOOK FAIL!!!",[])
@@ -238,7 +250,7 @@ class FacebookProfile(models.Model):
                 raise URLError(104)
             logging.debug("FBC: Calling for '%s'" % ids_to_get)
             tmp_info = _facebook_obj.users.getInfo(ids_to_get, self.FACEBOOK_FIELDS)
-            
+
             ret.extend(tmp_info)
             for info in tmp_info:
                 if _facebook_obj.uid is None:
@@ -247,7 +259,7 @@ class FacebookProfile(models.Model):
                     cache_key = 'fb_user_info_%s_%s' % (_facebook_obj.uid,info['uid'])
 
                 cache.set(cache_key,info,getattr(settings,'FACEBOOK_CACHE_TIMEOUT',1800))
-                
+
         return ret
 
     def __configure_me(self):
