@@ -46,6 +46,8 @@ def facebook_login(request):
                 login(request, user)
                 # Redirect to a success page.
                 logging.debug("FBC: Redirecting to %s" % next)
+                if request.is_ajax():
+                    return HttpResponse("true")
                 return HttpResponseRedirect(next)
             else:
                 logging.debug("FBC: This account is disabled.")
