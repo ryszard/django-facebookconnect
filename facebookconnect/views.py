@@ -56,9 +56,8 @@ def facebook_login(request):
             #we have to set this user up
             user = User(username=request.facebook.uid)
             user.set_unusable_password()
-            profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
-            profile.user = user
             user.save()
+            profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
             profile.save()
             logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
             user = authenticate(request=request)
