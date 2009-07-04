@@ -54,9 +54,12 @@ def facebook_login(request):
                 raise FacebookAuthError('This account is disabled.')
         elif request.facebook.uid:
             #we have to set this user up
-            user = User(username=request.facebook.uid)
-            user.set_unusable_password()
-            user.save()
+            try:
+                user = User.objects.get(username=request.facebook.uid)
+            except User.DoesNotExist:
+                user = User(username=request.facebook.uid)
+                user.set_unusable_password()
+                user.save()
             profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
             profile.save()
             logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
