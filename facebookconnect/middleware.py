@@ -23,14 +23,14 @@ from datetime import datetime
 from django.core.urlresolvers import reverse
 from django.contrib.auth import logout,login
 from django.conf import settings
-from facebook import Facebook,FacebookError
+from facebook import Facebook, FacebookError
 from django.template import TemplateSyntaxError
-from django.http import HttpResponseRedirect,HttpResponse
+from django.http import HttpResponseRedirect, HttpResponse
 from urllib2 import URLError
 from facebookconnect.models import FacebookProfile
 
 class FacebookConnectMiddleware(object):
-    """Middlware to provide a working facebook object"""
+    """Middleware to provide a working facebook object"""
     def process_request(self,request):
         """process incoming request"""
         try:
@@ -38,20 +38,20 @@ class FacebookConnectMiddleware(object):
             # that has accepted this application. useless.
             bona_fide = request.facebook.check_session(request)
             logging.debug("FBC Middleware: UID in request: %s" % request.facebook.uid)
-            
+
             logging.debug("FBC Middleware: Bona Fide: %s, Logged in: %s, Session: %s" % (bona_fide,request.facebook.uid,request.facebook.session_key))
-            
-            # make sure a users django auth and facebook auth are in sync, if they are 
+
+            # make sure a users django auth and facebook auth are in sync, if they are
             # a facebook only user
-            if (request.user.is_authenticated() 
-                    and request.user.facebook_profile 
+            if (request.user.is_authenticated()
+                    and request.user.facebook_profile
                     and request.user.facebook_profile.facebook_only()):
                 cur_user = request.facebook.users.getLoggedInUser()
                 if not bona_fide or int(cur_user) != int(request.facebook.uid):
                     logging.debug("FBC Middleware: DIE DIE DIE")
                     logout(request)
                     request.facebook.session_key = None
-                    request.facebook.uid = None
+                    request.facebook.uid = None if not getattr(settings, 'FACEBOOK_DEBUG', False) else 0
 
         except FacebookProfile.DoesNotExist,ex:
             logging.debug(u"FBC Middleware: User doesn't have facebook or needs to finish setup!")
@@ -62,7 +62,7 @@ class FacebookConnectMiddleware(object):
             request.facebook.uid = None
             warnings.warn(u'FBC Middleware failed: %s' % ex)
             logging.exception('FBC Middleware: something went terribly wrong')
-    
+
     def process_exception(self,request,exception):
         my_ex = exception
         if type(exception) == TemplateSyntaxError:
