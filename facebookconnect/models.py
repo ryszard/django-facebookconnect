@@ -34,37 +34,45 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db.models.signals import post_delete
 
 class FacebookBackend(ModelBackend):
-    def authenticate(self, request=None):
-        fb = get_facebook_client()
-        logging.debug("ala %s", fb.check_session(request))
-        logging.debug("fb.uid %s", fb.uid)
-        if fb.uid:
-            try:
-                logging.debug("Checking for Facebook Profile %s..." % fb.uid)
-                fbprofile = FacebookProfile.objects.get(facebook_id=fb.uid)
-                return fbprofile.user
-            except FacebookProfile.DoesNotExist:
-                logging.debug("FB account hasn't been used before...")
-                return None
-        elif settings.FACEBOOK_DEBUG:
-            try:
-                fbprofile = FacebookProfile.objects.get(facebook_id=0)
 
-            except FacebookProfile.DoesNotExist:
-                dummy_name = "facebook_dummy"
-                try:
-                    user = User.objects.get(username=dummy_name)
-                except User.DoesNotExist:
-                    user = User.objects.create(username=dummy_name)
-                    user.set_unusable_password()
-                    user.save()
-                fbprofile = FacebookProfile(user=user, facebook_id=0)
-                fbprofile.save()
-            logging.debug("Using dummy ")
-            return fbprofile.user
-        else:
-            logging.debug("Invalid Facebook login for %s" % fb.__dict__)
-            return None
+    def get_dummy(self):
+        """Create a dummy Facebook User and Profile to allow debugging.
+
+        """
+        try:
+            fbprofile = FacebookProfile.objects.get(facebook_id=0)
+        except FacebookProfile.DoesNotExist:
+            dummy_name = "facebook_dummy"
+            try:
+                user = User.objects.get(username=dummy_name)
+            except User.DoesNotExist:
+                user = User.objects.create(username=dummy_name)
+                user.set_unusable_password()
+                user.save()
+            fbprofile = FacebookProfile(user=user, facebook_id=0)
+            fbprofile.save()
+        return fbprofile.user
+
+    def authenticate(self, request=None):
+        uid = request.facebook.uid
+
+        if uid is None:
+            return getattr(settings, 'FACEBOOK_DEBUG', None) and self.get_dummy()
+
+        try:
+            logging.debug("Checking for Facebook Profile %s..." % uid)
+            profile = FacebookProfile.objects.get(facebook_id=uid)
+            return profile.user
+        except FacebookProfile.DoesNotExist:
+            try:
+                user = User.objects.get(username=uid)
+            except User.DoesNotExist:
+                user = User(username=uid)
+                user.set_unusable_password()
+                user.save()
+            profile = FacebookProfile(user=user, facebook_id=uid)
+            profile.save()
+        return profile.user
 
 class BigIntegerField(models.IntegerField):
     empty_strings_allowed=False

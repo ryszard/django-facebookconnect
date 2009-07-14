@@ -20,7 +20,12 @@
 import logging
 import sha, random
 
-from django.http import HttpResponse, HttpResponseRedirect
+try:
+    import json
+except ImportError:
+    import simplejson as json
+
+from django.http import HttpResponse, HttpResponseRedirect, HttpResponseNotAllowed
 from django.template import RequestContext
 from django.core.urlresolvers import reverse
 from django.shortcuts import render_to_response
@@ -31,56 +36,50 @@ from django.conf import settings
 
 from facebookconnect.models import FacebookProfile
 
-def facebook_login(request):
-    if request.method == "POST":
-        logging.debug("FBC: OK logging in...")
-        if request.POST.get('next',False) and request.POST['next']:
-            next = request.POST['next']
-        else:
-            next = getattr(settings,'LOGIN_REDIRECT_URL','/')
-        user = authenticate(request=request)
-        logging.debug(user)
-        logging.debug(request.facebook.uid)
-        if user is not None:
-            if user.is_active:
-                login(request, user)
-                # Redirect to a success page.
-                logging.debug("FBC: Redirecting to %s" % next)
-                if request.is_ajax():
-                    return HttpResponse("true")
-                return HttpResponseRedirect(next)
-            else:
-                logging.debug("FBC: This account is disabled.")
-                raise FacebookAuthError('This account is disabled.')
-        elif request.facebook.uid:
-            #we have to set this user up
-            try:
-                user = User.objects.get(username=request.facebook.uid)
-            except User.DoesNotExist:
-                user = User(username=request.facebook.uid)
-                user.set_unusable_password()
-                user.save()
-                profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
-                profile.save()
-                logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
-            login(request, user)
-            if request.is_ajax():
-                return HttpResponse("OK")
-            return HttpResponseRedirect(next)
-    else:
-        return HttpResponse("TODO")
+class JSONResponse(HttpResponse):
+    def __init__(self, content=None, status=None):
+        content = json.dumps(content)
+        super(JSONResponse, self).__init__(content=content,
+                                           status=status,
+                                           content_type="application/json")
 
-    # logging.debug("FBC: Got redirected here")
-#     url = reverse('auth_login')
-#     if request.GET.get('next',False):
-#         url += "?next=%s" % request.GET['next']
-#     return HttpResponseRedirect(url)
+
+def facebook_login(request):
+    # only post makes sense now, as we don't have a separate login
+    # page
+    allow_get = getattr(settings, 'FACEBOOK_LOGIN_ALLOW_GET', False)
+    if request.method != "POST" and not allow_get:
+        return HttpResponseNotAllowed(["POST"])
+
+    next = request.POST.get('next', getattr(settings,'LOGIN_REDIRECT_URL','/'))
+
+    user = authenticate(request=request)
+    if user is None or not user.is_active:
+        verbose_reason="Some problem with authentication"
+        if request.is_ajax():
+            return JSONResponse(dict(status=False,
+                                     reason="authentication",
+                                     verbose_reason=verbose_reason),
+                                status=403,)
+        else:
+            return HttpResponseForbidden(verbose_reason)
+
+    login(request, user)
+
+    if request.is_ajax():
+        return JSONResponse(True)
+
+    return HttpResponseRedirect(next)
+
+
 
 def facebook_logout(request):
     logout(request)
     if getattr(request,'facebook',False):
         request.facebook.session_key = None
         request.facebook.uid = None
+    if request.is_ajax():
+        return JSONResponse(True)
     return HttpResponseRedirect(getattr(settings,'LOGOUT_REDIRECT_URL','/'))
 
 class FacebookAuthError(Exception):
