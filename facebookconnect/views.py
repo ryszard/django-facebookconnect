@@ -60,9 +60,9 @@ def facebook_login(request):
                 user = User(username=request.facebook.uid)
                 user.set_unusable_password()
                 user.save()
-            profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
-            profile.save()
-            logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
+                profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
+                profile.save()
+                logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
             user = authenticate(request=request)
             login(request, user)
             if request.is_ajax():
