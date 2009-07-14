@@ -63,7 +63,6 @@ def facebook_login(request):
                 profile = FacebookProfile(user=user, facebook_id=request.facebook.uid)
                 profile.save()
                 logging.info("FBC: Added user and profile for %s!" % request.facebook.uid)
-            user = authenticate(request=request)
             login(request, user)
             if request.is_ajax():
                 return HttpResponse("OK")
