@@ -94,7 +94,7 @@ class FacebookTemplate(models.Model):
 
 class FacebookProfile(models.Model):
     user = models.OneToOneField(User,related_name="facebook_profile")
-    facebook_id = models.IntegerField(unique=True)
+    facebook_id = BigIntegerField(unique=True)
 
     __facebook_info = None
 
