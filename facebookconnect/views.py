@@ -43,15 +43,28 @@ class JSONResponse(HttpResponse):
                                            status=status,
                                            content_type="application/json")
 
+def ensure_login(request):
+    """This view should be called only by login_required when the user
+    is not logged in. If the call was non-ajax, acts as
+    facebook_login.
+
+    """
+    if request.is_ajax():
+        return JSONResponse({'status': False,
+                             'reason': 'login-required',
+                             'verbose_reason': 'You must be logged in to access this resource'})
+
+    else:
+        return facebook_login(request)
 
 def facebook_login(request):
     # only post makes sense now, as we don't have a separate login
     # page
-    allow_get = getattr(settings, 'FACEBOOK_LOGIN_ALLOW_GET', False)
-    if request.method != "POST" and not allow_get:
+    if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
-    next = request.POST.get('next', getattr(settings,'LOGIN_REDIRECT_URL','/'))
+
+
 
     user = authenticate(request=request)
     if user is None or not user.is_active:
@@ -67,7 +80,7 @@ def facebook_login(request):
     login(request, user)
 
     if request.is_ajax():
-        return JSONResponse(True)
+        return JSONResponse(dict(status=True))
 
     return HttpResponseRedirect(next)
 
@@ -79,7 +92,7 @@ def facebook_logout(request):
         request.facebook.session_key = None
         request.facebook.uid = None
     if request.is_ajax():
-        return JSONResponse(True)
+        return JSONResponse(dict(status=True))
     return HttpResponseRedirect(getattr(settings,'LOGOUT_REDIRECT_URL','/'))
 
 class FacebookAuthError(Exception):

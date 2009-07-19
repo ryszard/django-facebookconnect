@@ -19,15 +19,21 @@
 
 from django.conf.urls.defaults import *
 from django.views.generic.simple import direct_to_template
-from facebookconnect.views import facebook_login,facebook_logout
+from facebookconnect.views import facebook_login, facebook_logout, ensure_login
 
 urlpatterns = patterns('',
     url(r'^login/?$',
         facebook_login,
         name="facebook_login"),
+
     url(r'^logout/?$',
         facebook_logout,
         name="facebook_logout"),
+
+    url(r'^ensure-login/?$',
+        ensure_login,
+        name="facebook_ensure_login"),
+
     url(r'^xd_receiver.htm$',
         direct_to_template,
         {'template': 'facebook/xd_receiver.htm'},
