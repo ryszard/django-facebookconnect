@@ -19,7 +19,7 @@
 
 import datetime
 import logging
-import sha, random
+import random
 from urllib2 import URLError
 
 from facebook.djangofb import Facebook, get_facebook_client
