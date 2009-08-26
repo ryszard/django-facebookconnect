@@ -57,7 +57,10 @@ class FacebookBackend(ModelBackend):
         uid = request.facebook.uid
 
         if uid is None:
-            return getattr(settings, 'FACEBOOK_DEBUG', None) and self.get_dummy()
+            if getattr(settings, 'FACEBOOK_DEBUG', False):
+                return self.get_dummy()
+            else:
+                return None
 
         try:
             logging.debug("Checking for Facebook Profile %s..." % uid)
