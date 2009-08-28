@@ -28,6 +28,7 @@ from django.template import TemplateSyntaxError
 from django.http import HttpResponseRedirect, HttpResponse
 from urllib2 import URLError
 from facebookconnect.models import FacebookProfile
+from facebook import FacebookError
 
 class FacebookConnectMiddleware(object):
     """Middleware to provide a working facebook object"""
@@ -46,8 +47,13 @@ class FacebookConnectMiddleware(object):
             if (request.user.is_authenticated()
                     and request.user.facebook_profile
                     and request.user.facebook_profile.facebook_only()):
-                cur_user = request.facebook.users.getLoggedInUser()
-                if not bona_fide or int(cur_user) != int(request.facebook.uid):
+                try:
+                    cur_user = request.facebook.users.getLoggedInUser()
+                except FacebookError:   # no valid session
+                    cur_user = None
+                if not bona_fide \
+                       or not cur_user \
+                       or int(cur_user) != int(request.facebook.uid):
                     logging.debug("FBC Middleware: DIE DIE DIE")
                     logout(request)
                     request.facebook.session_key = None
