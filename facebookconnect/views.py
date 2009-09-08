@@ -82,6 +82,7 @@ def facebook_login(request):
     if request.is_ajax():
         return JSONResponse(dict(status=True))
 
+    next = request.GET.get('next', '/')
     return HttpResponseRedirect(next)
 
 
