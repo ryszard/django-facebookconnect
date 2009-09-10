@@ -58,14 +58,6 @@ def ensure_login(request):
         return facebook_login(request)
 
 def facebook_login(request):
-    # only post makes sense now, as we don't have a separate login
-    # page
-    if request.method != "POST":
-        return HttpResponseNotAllowed(["POST"])
-
-
-
-
     user = authenticate(request=request)
     if user is None or not user.is_active:
         verbose_reason="Some problem with authentication"
