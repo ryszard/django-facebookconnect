@@ -74,19 +74,21 @@ def facebook_login(request):
     if request.is_ajax():
         return JSONResponse(dict(status=True))
 
-    next = request.GET.get('next', '/')
+    next = request.GET.get('next', getattr(settings,'LOGIN_REDIRECT_URL','/'))
     return HttpResponseRedirect(next)
 
 
 
 def facebook_logout(request):
+    logging.debug('FBC Login: logging out user %r' % request.user)
     logout(request)
     if getattr(request,'facebook',False):
         request.facebook.session_key = None
         request.facebook.uid = None
     if request.is_ajax():
         return JSONResponse(dict(status=True))
-    return HttpResponseRedirect(getattr(settings,'LOGOUT_REDIRECT_URL','/'))
+    next = request.GET.get('next', getattr(settings,'LOGOUT_REDIRECT_URL','/'))
+    return HttpResponseRedirect(next)
 
 class FacebookAuthError(Exception):
     def __init__(self, message):
